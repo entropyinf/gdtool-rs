@@ -4,7 +4,6 @@ pub mod demo_generator;
 pub mod excel_reader;
 pub mod generator;
 pub mod godot;
-pub mod types;
 pub mod types_handler;
 
 pub use demo_generator::DemoGenerator;

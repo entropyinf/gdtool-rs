@@ -238,14 +238,14 @@ func {{ sheet.func_name_get }}(id: int) -> {{ sheet.class_name }}:
 
 
 func {{ sheet.func_name_all }}() -> Array[{{ sheet.class_name }}]:
-    return {{ sheet.func_name_filter }}(func(obj): return true)
+    return {{ sheet.func_name_filter }}(func(_obj): return true)
 
 
 func {{ sheet.func_name_filter }}(filter_func: Callable) -> Array[{{ sheet.class_name }}]:
     var sheet_data = get_sheet("{{ sheet.sheet_name }}")
     var result: Array[{{ sheet.class_name }}] = []
     for row in sheet_data:
-        var obj = {{ sheet.class_name }}()
+        var obj = {{ sheet.class_name }}.new()
 {% for field in sheet.fields %}        obj.{{ field.var_name }} = _parse_value(row.get("{{ field.field_name }}"), "{{ field.type_name }}")
 {% endfor %}        if filter_func.call(obj):
             result.append(obj)

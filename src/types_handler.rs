@@ -99,7 +99,7 @@ impl TypeHandler for IntHandler {
     }
 
     fn godot_parse_code(&self) -> &'static str {
-        "int(value)"
+        "return int(value)"
     }
 }
 
@@ -136,7 +136,7 @@ impl TypeHandler for FloatHandler {
     }
 
     fn godot_parse_code(&self) -> &'static str {
-        "float(value)"
+        "return float(value)"
     }
 }
 
@@ -174,7 +174,7 @@ impl TypeHandler for StringHandler {
     }
 
     fn godot_parse_code(&self) -> &'static str {
-        "value"
+        "return value"
     }
 }
 
@@ -218,7 +218,10 @@ impl TypeHandler for BoolHandler {
     }
 
     fn godot_parse_code(&self) -> &'static str {
-        "var lower = value.to_lower(); return lower == \"true\" or lower == \"1\" or lower == \"yes\" or lower == \"on\""
+        r#"
+            var lower = value.to_lower()
+            return lower == "true" or lower == "1" or lower == "yes" or lower == "on"
+        "#
     }
 }
 
@@ -257,7 +260,13 @@ impl TypeHandler for DictHandler {
     }
 
     fn godot_parse_code(&self) -> &'static str {
-        "var json = JSON.new(); if json.parse(value) == OK { return json.data; } return {}"
+        r#"
+            var json = JSON.new()
+            if json.parse(value) == OK: 
+                return json.data
+            else:
+                return {}  
+        "#
     }
 }
 
@@ -295,7 +304,7 @@ impl TypeHandler for ArrayHandler {
     }
 
     fn godot_parse_code(&self) -> &'static str {
-        "return value.split(\"\\n\").filter(func(s): return s.length() > 0)"
+        "return value.split(\"\\n\")"
     }
 }
 
@@ -347,7 +356,7 @@ impl ArrayVector2iHandler {
     fn validate(s: &str) -> bool {
         let mut chars = s.chars().peekable();
         let mut state = State::Init;
-        
+
         while let Some(&c) = chars.peek() {
             state = match (state, c) {
                 (State::Init, '(') => {
@@ -382,14 +391,12 @@ impl ArrayVector2iHandler {
                     chars.next();
                     State::Init
                 }
-                (State::VectorEnd, _) if chars.peek().is_none() => {
-                    State::Done
-                }
+                (State::VectorEnd, _) if chars.peek().is_none() => State::Done,
                 (State::Done, _) => return false,
                 _ => return false,
             };
         }
-        
+
         state == State::VectorEnd || state == State::Done
     }
 }

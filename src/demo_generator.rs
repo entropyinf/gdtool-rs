@@ -162,7 +162,7 @@ impl DemoGenerator {
             // 第 1 行：字段名
             let field_names: Vec<_> = handlers
                 .iter()
-                .map(|h| format!("field_{}", h.name().to_lowercase()))
+                .map(|h| format!("field_{}", h.name().replace("[", "_").replace("]", "").to_lowercase()))
                 .collect();
             sw.append_row(Row::from_iter(field_names.into_iter()))?;
 
