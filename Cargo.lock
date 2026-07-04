@@ -372,6 +372,7 @@ dependencies = [
  "clap",
  "convert_case",
  "csv",
+ "regex",
  "serde",
  "serde_json",
  "simple_excel_writer",

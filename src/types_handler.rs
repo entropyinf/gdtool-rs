@@ -1,11 +1,16 @@
 use calamine::Data;
+use regex::Regex;
 use serde_json::Value as JsonValue;
 
 pub trait TypeHandler: Send + Sync {
     // Type name
-    fn name(&self) -> &'static str;
+    fn name(&self) -> &'static str {
+        self.godot_type()
+    }
     // Type aliases
-    fn aliases(&self) -> &'static [&'static str];
+    fn aliases(&self) -> &'static [&'static str] {
+        &[]
+    }
     // Godot type
     fn godot_type(&self) -> &'static str;
     // Parse value from Excel cell
@@ -13,7 +18,9 @@ pub trait TypeHandler: Send + Sync {
     // Convert to CSV string
     fn to_csv_string(&self, value: &str) -> String;
     // Generate demo value
-    fn demo_value(&self) -> String;
+    fn demo_value(&self) -> String {
+        "".to_string()
+    }
     // Godot parse code snippet
     fn godot_parse_code(&self) -> &'static str;
 }
@@ -38,6 +45,7 @@ impl TypeRegistry {
         self.register(BoolHandler);
         self.register(DictHandler);
         self.register(ArrayHandler);
+        self.register(Vector2iHandler);
         self.register(ArrayVector2iHandler);
     }
 
@@ -69,10 +77,6 @@ impl Default for TypeRegistry {
 pub struct IntHandler;
 
 impl TypeHandler for IntHandler {
-    fn name(&self) -> &'static str {
-        "int"
-    }
-
     fn aliases(&self) -> &'static [&'static str] {
         &["int", "integer", "i32", "i64"]
     }
@@ -106,9 +110,6 @@ impl TypeHandler for IntHandler {
 pub struct FloatHandler;
 
 impl TypeHandler for FloatHandler {
-    fn name(&self) -> &'static str {
-        "float"
-    }
 
     fn aliases(&self) -> &'static [&'static str] {
         &["float", "f32", "f64", "double", "number"]
@@ -143,10 +144,6 @@ impl TypeHandler for FloatHandler {
 pub struct StringHandler;
 
 impl TypeHandler for StringHandler {
-    fn name(&self) -> &'static str {
-        "String"
-    }
-
     fn aliases(&self) -> &'static [&'static str] {
         &["string", "str", "text"]
     }
@@ -174,17 +171,17 @@ impl TypeHandler for StringHandler {
     }
 
     fn godot_parse_code(&self) -> &'static str {
-        "return value"
+        r#"
+            if value.is_empty() or value.to_lower() == "nil" or value.to_lower() == "null":
+                return ""
+            return value
+        "#
     }
 }
 
 pub struct BoolHandler;
 
 impl TypeHandler for BoolHandler {
-    fn name(&self) -> &'static str {
-        "bool"
-    }
-
     fn aliases(&self) -> &'static [&'static str] {
         &["bool", "boolean"]
     }
@@ -228,13 +225,6 @@ impl TypeHandler for BoolHandler {
 pub struct DictHandler;
 
 impl TypeHandler for DictHandler {
-    fn name(&self) -> &'static str {
-        "Dictionary"
-    }
-
-    fn aliases(&self) -> &'static [&'static str] {
-        &["dict", "dictionary", "object", "json"]
-    }
 
     fn godot_type(&self) -> &'static str {
         "Dictionary"
@@ -273,14 +263,6 @@ impl TypeHandler for DictHandler {
 pub struct ArrayHandler;
 
 impl TypeHandler for ArrayHandler {
-    fn name(&self) -> &'static str {
-        "Array[String]"
-    }
-
-    fn aliases(&self) -> &'static [&'static str] {
-        &[]
-    }
-
     fn godot_type(&self) -> &'static str {
         "Array[String]"
     }
@@ -304,7 +286,54 @@ impl TypeHandler for ArrayHandler {
     }
 
     fn godot_parse_code(&self) -> &'static str {
-        "return value.split(\"\\n\")"
+        r#"
+            var result: Array[String] = []
+            for item in value.split("\n"):
+                result.append(item)
+            return result
+        "#
+    }
+}
+
+pub struct Vector2iHandler;
+
+impl TypeHandler for Vector2iHandler {
+    fn godot_type(&self) -> &'static str {
+        "Vector2i"
+    }
+
+    fn parse_from_excel(&self, cell: &Data) -> Option<String> {
+        match cell {
+            Data::String(s) => Self::validate(s).then_some(s.clone()),
+            _ => None,
+        }
+    }
+
+    fn to_csv_string(&self, value: &str) -> String {
+        value.to_string()
+    }
+
+    fn demo_value(&self) -> String {
+        "(1,2)".to_string()
+    }
+
+    fn godot_parse_code(&self) -> &'static str {
+        r#"
+            var pattern = "\\(([0-9-]+),([0-9-]+)\\)"
+            var regex = RegEx.new()
+            regex.compile(pattern)
+            var match = regex.search(value)
+            if match:
+                return Vector2i(match.get_string(1).to_int(), match.get_string(2).to_int())
+            return Vector2i.ZERO
+        "#
+    }
+}
+
+impl Vector2iHandler {
+    fn validate(s: &str) -> bool {
+        let re = Regex::new(r"^\((-?[0-9]+),(-?[0-9]+)\)$").unwrap();
+        re.is_match(s)
     }
 }
 
@@ -340,8 +369,8 @@ impl TypeHandler for ArrayVector2iHandler {
 
     fn godot_parse_code(&self) -> &'static str {
         r#"
-            var result = [] 
-            var pattern = "(([0-9-]+),([0-9-]+))"
+            var result: Array[Vector2i] = [] 
+            var pattern = "\\(([0-9-]+),([0-9-]+)\\)"
             var regex = RegEx.new()
             regex.compile(pattern)
             var matches = regex.search_all(value)
@@ -354,60 +383,7 @@ impl TypeHandler for ArrayVector2iHandler {
 
 impl ArrayVector2iHandler {
     fn validate(s: &str) -> bool {
-        let mut chars = s.chars().peekable();
-        let mut state = State::Init;
-
-        while let Some(&c) = chars.peek() {
-            state = match (state, c) {
-                (State::Init, '(') => {
-                    chars.next();
-                    State::ExpectX
-                }
-                (State::ExpectX, '0'..='9' | '-') => {
-                    chars.next();
-                    State::InX
-                }
-                (State::InX, '0'..='9') => {
-                    chars.next();
-                    State::InX
-                }
-                (State::InX, ',') => {
-                    chars.next();
-                    State::ExpectY
-                }
-                (State::ExpectY, '0'..='9' | '-') => {
-                    chars.next();
-                    State::InY
-                }
-                (State::InY, '0'..='9') => {
-                    chars.next();
-                    State::InY
-                }
-                (State::InY, ')') => {
-                    chars.next();
-                    State::VectorEnd
-                }
-                (State::VectorEnd, ',') => {
-                    chars.next();
-                    State::Init
-                }
-                (State::VectorEnd, _) if chars.peek().is_none() => State::Done,
-                (State::Done, _) => return false,
-                _ => return false,
-            };
-        }
-
-        state == State::VectorEnd || state == State::Done
+        let re = Regex::new(r"^\((-?[0-9]+),(-?[0-9]+)\)(,\((-?[0-9]+),(-?[0-9]+)\))*$").unwrap();
+        re.is_match(s)
     }
-}
-
-#[derive(PartialEq)]
-enum State {
-    Init,
-    ExpectX,
-    InX,
-    ExpectY,
-    InY,
-    VectorEnd,
-    Done,
 }

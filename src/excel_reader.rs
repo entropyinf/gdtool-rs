@@ -112,15 +112,15 @@ impl ExcelReader {
             for (col_idx, field) in sheet_def.fields.iter().enumerate() {
                 if let Some(cell) = range.get((row_idx, col_idx)) {
                     if let Some(handler) = registry.find_handler(&field.type_name) {
-                        if let Some(value) = handler.parse_from_excel(cell) {
-                            row.insert(field.name.clone(), value);
-                        }
+                        let value = handler.parse_from_excel(cell).unwrap_or_default();
+                        row.insert(field.name.clone(), value);
                     } else {
-                        // 未知类型，作为字符串处理
                         if let Some(s) = cell.get_string() {
                             row.insert(field.name.clone(), s.to_string());
                         }
                     }
+                } else {
+                    row.insert(field.name.clone(), "".to_string());
                 }
             }
 

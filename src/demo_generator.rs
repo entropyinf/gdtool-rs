@@ -33,7 +33,7 @@ impl DemoGenerator {
 
             // 第 0 行：类型
             sw.append_row(row![
-                "Int", "String", "Float", "Bool", "String?", "Int", "String"
+                "Int", "String", "Float", "Bool", "String", "Int", "String"
             ])?;
             // 第 1 行：字段名
             sw.append_row(row![
@@ -162,7 +162,12 @@ impl DemoGenerator {
             // 第 1 行：字段名
             let field_names: Vec<_> = handlers
                 .iter()
-                .map(|h| format!("field_{}", h.name().replace("[", "_").replace("]", "").to_lowercase()))
+                .map(|h| {
+                    format!(
+                        "field_{}",
+                        h.name().replace("[", "_").replace("]", "").to_lowercase()
+                    )
+                })
                 .collect();
             sw.append_row(Row::from_iter(field_names.into_iter()))?;
 

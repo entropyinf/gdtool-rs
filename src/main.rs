@@ -29,7 +29,6 @@ enum Commands {
         /// CSV extension (default: txt)
         #[arg(long, default_value = "txt")]
         csv_ext: String,
-
     },
     /// Generate a demo Excel file with all types
     Demo {
@@ -44,7 +43,12 @@ fn main() {
     let registry = TypeRegistry::new();
 
     match &cli.command {
-        Commands::Convert { input, csv_out, gd_out ,csv_ext} => {
+        Commands::Convert {
+            input,
+            csv_out,
+            gd_out,
+            csv_ext,
+        } => {
             println!("Processing Excel file: {}", input);
             println!("CSV output directory: {}", csv_out);
             println!("Godot output directory: {}", gd_out);
