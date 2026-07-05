@@ -33,6 +33,13 @@ struct LoaderTemplateData {
 }
 
 #[derive(Serialize)]
+struct ParserTemplateData {
+    type_cases: Vec<TypeCase>,
+    generator_name: String,
+    generate_time: String,
+}
+
+#[derive(Serialize)]
 struct LoaderSheetData {
     sheet_name: String,
     class_name: String,
@@ -69,14 +76,18 @@ impl GodotGenerator {
         let mut tera = Tera::default();
         tera.add_raw_template("class", CLASS_TEMPLATE)?;
         tera.add_raw_template("loader", LOADER_TEMPLATE)?;
+        tera.add_raw_template("parser", PARSER_TEMPLATE)?;
 
         // Generate class files
         for (sheet_def, _) in sheets {
             Self::generate_class(sheet_def, registry, &tera, output_dir)?;
         }
 
+        // Generate parser utility file
+        Self::generate_parser(registry, &tera, output_dir)?;
+
         // Generate loader file
-        Self::generate_loader(sheets, registry, &tera, output_dir)?;
+        Self::generate_loader(sheets, &tera, output_dir)?;
 
         Ok(())
     }
@@ -122,9 +133,38 @@ impl GodotGenerator {
         Ok(())
     }
 
+    fn generate_parser(
+        registry: &TypeRegistry,
+        tera: &Tera,
+        output_dir: &str,
+    ) -> Result<()> {
+        let file_path = Path::new(output_dir).join("config_parser.gd");
+
+        let type_cases = registry
+            .all_handlers()
+            .iter()
+            .map(|h| TypeCase {
+                type_name: h.name().to_string(),
+                parse_code: h.godot_parse_code().to_string(),
+            })
+            .collect();
+
+        let data = ParserTemplateData {
+            type_cases,
+            generator_name: "gdtool-rs".to_string(),
+            generate_time: Local::now().format("%Y-%m-%d").to_string(),
+        };
+        let context = Context::from_serialize(&data)?;
+        let content = tera.render("parser", &context)?;
+
+        let mut file = File::create(file_path)?;
+        file.write_all(content.as_bytes())?;
+
+        Ok(())
+    }
+
     fn generate_loader(
         sheets: &[(SheetDef, SheetData)],
-        registry: &TypeRegistry,
         tera: &Tera,
         output_dir: &str,
     ) -> Result<()> {
@@ -150,18 +190,9 @@ impl GodotGenerator {
             })
             .collect();
 
-        let type_cases = registry
-            .all_handlers()
-            .iter()
-            .map(|h| TypeCase {
-                type_name: h.name().to_string(),
-                parse_code: h.godot_parse_code().to_string(),
-            })
-            .collect();
-
         let data = LoaderTemplateData {
             sheets: sheets_data,
-            type_cases,
+            type_cases: Vec::new(),
             generator_name: "gdtool-rs".to_string(),
             generate_time: Local::now().format("%Y-%m-%d").to_string(),
         };
@@ -247,13 +278,25 @@ func {{ sheet.func_name_filter }}(filter_func: Callable) -> Array[{{ sheet.class
     for row in sheet_data:
         var obj = {{ sheet.class_name }}.new()
 {% for field in sheet.fields %}        var value_{{ field.var_name }} = row.get("{{ field.field_name }}")
-        obj.{{ field.var_name }} = _parse_value(value_{{ field.var_name }} if value_{{ field.var_name }} != null else "", "{{ field.type_name }}")
+        obj.{{ field.var_name }} = ConfigParser.parse_value(value_{{ field.var_name }} if value_{{ field.var_name }} != null else "", "{{ field.type_name }}")
 {% endfor %}        if filter_func.call(obj):
             result.append(obj)
     return result
 
 {% endfor %}
-func _parse_value(value: String, type_name: String):
+"#;
+
+const PARSER_TEMPLATE: &str = r#"
+# @generated
+# ==============================================
+# Auto-generated code, do not edit manually!
+# All changes will be lost when regenerating next time
+# Generator: {{ generator_name }}
+# Generate Time: {{ generate_time }}
+# ==============================================
+class_name ConfigParser
+
+static func parse_value(value: String, type_name: String):
     match type_name:
 {% for case in type_cases %}        "{{ case.type_name }}":
             {{ case.parse_code }}
